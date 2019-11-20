@@ -94,11 +94,11 @@ export const createTrainAndTestSet = async (
   tensorflow.util.shuffle(trainData);
   const validationData = trainData.splice(0, numSamplesValidation);
 
-  const validationDataSet = await createLabledTensorflowDataSet(
+  const validationDataSet = await createLabeledTensorflowDataSet(
     validationData,
     categories
   );
-  const trainDataSet = await createLabledTensorflowDataSet(
+  const trainDataSet = await createLabeledTensorflowDataSet(
     trainData,
     categories
   );
@@ -117,19 +117,18 @@ export const createPredictionSet = async (images: Image[]) => {
   for (const image of predictionImageSet) {
     predictionTensorSet.push(await tensorImageData(image));
   }
-  debugger;
 
   return tensorflow.tidy(() => tensorflow.concat(predictionImageSet));
 };
 
-const createLabledTensorflowDataSet = async (
-  labledData: Image[],
+const createLabeledTensorflowDataSet = async (
+  labeledData: Image[],
   categories: Category[]
 ) => {
   let tensorData: tensorflow.Tensor<tensorflow.Rank>[] = [];
   let tensorLables: any = [];
 
-  for (const image of labledData) {
+  for (const image of labeledData) {
     tensorData.push(await tensorImageData(image));
     tensorLables.push(
       findCategoryIndex(categories, image.categoryIdentifier) - 1
@@ -139,10 +138,10 @@ const createLabledTensorflowDataSet = async (
   let concatenatedTensorData = tensorflow.tidy(() =>
     tensorflow.concat(tensorData)
   );
-  let concatenatedLableData = tensorflow.tidy(() =>
+  let concatenatedLabelData = tensorflow.tidy(() =>
     tensorflow.oneHot(tensorLables, categories.length - 1)
   );
 
-  return { data: concatenatedTensorData, lables: concatenatedLableData };
+  return { data: concatenatedTensorData, lables: concatenatedLabelData };
 };
 
