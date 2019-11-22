@@ -1,9 +1,33 @@
 import * as tensorflow from '@tensorflow/tfjs';
 import * as _ from 'lodash';
 
+const changeInputShape = async (
+  model: tensorflow.Sequential,
+  inputShape: number[]
+) => {
+  const newModel = tensorflow.sequential();
+  newModel.add(tensorflow.layers.inputLayer({inputShape: inputShape}))
+  const map = tensorflow.serialization.SerializationMap.getMap().classNameMap;
+  for (let i = 1; i < model.layers.length; i++) {
+    const layer = model.layers[i];
+    const className : string = layer.getClassName();
+    const [cls, fromConfig] = map[className];
+    let cfg = layer.getConfig();
+    const newlayer = fromConfig(cls, cfg);
+    // @ts-ignore
+    newModel.add(newlayer);
+    // @ts-ignore
+    newlayer.setWeights(layer.getWeights())
+  }
+
+  return newModel;
+};
+
 const createMobileNet = async (
   classes: number,
-  freeze: boolean
+  inputShape: number[] = [224, 224, 3],
+  freeze: boolean = false,
+  includeTop: boolean = true
 ) => {
   const resource =
     'https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_0.25_224/model.json';
@@ -13,60 +37,63 @@ const createMobileNet = async (
   const layerName = 'conv_pw_13_relu';
   const layer = mobilenet.getLayer(layerName);
 
-  const backbone = tensorflow.model({
-    inputs: mobilenet.inputs,
-    outputs: layer.output
-  });
+  const backbone = tensorflow.sequential();
+  for (const l of mobilenet.layers) {
+    backbone.add(l);
+    if (l.name == layerName) {
+      break;
+    }
+  }
+
+  let model = backbone;
+  if (inputShape != [224, 224, 3]) {
+    model = await changeInputShape(model, inputShape);
+  }
 
   if (freeze) {
-    backbone.layers.forEach(function(l){
+    model.layers.forEach(function(l){
       l.trainable = false;
     })
   }
 
-  const a = tensorflow.layers.globalAveragePooling2d({
-    inputShape: backbone.outputs[0].shape.slice(1)
-  });
+  if (includeTop) {
+    model.add(tensorflow.layers.globalAveragePooling2d({}));
 
-  const b = tensorflow.layers.reshape({
-    targetShape: [1,1,backbone.outputs[0].shape[3]]
-  });
+    const numfeat = model.layers[model.layers.length - 1].outputShape[1]
+    model.add(tensorflow.layers.reshape({
+      targetShape: [1,1,numfeat as number]}));
 
-  const c = tensorflow.layers.dropout({
-    rate: 0.001
-  });
+    model.add(tensorflow.layers.dropout({rate: 0.001}));
 
-  const d = tensorflow.layers.conv2d({
-    filters: classes,
-    kernelSize: [1,1]
-  });
+    model.add(tensorflow.layers.conv2d({
+      filters: classes,
+      kernelSize: [1,1]}));
 
-  const e = tensorflow.layers.reshape({
-    targetShape: [classes]
-  });
+    model.add(tensorflow.layers.reshape({
+      targetShape: [classes]}));
 
-  const f = tensorflow.layers.activation({
-    activation: 'softmax'
-  });
-
-  const config = {
-    layers: [...backbone.layers, a, b, c, d, e, f]
-  };
-
-  const model = tensorflow.sequential(config);
+    model.add(tensorflow.layers.activation({
+      activation: 'softmax'}));
+  }
 
   return model;
 };
 
-const createModel = async (numberOfClasses: number) => {
+const createModel = async (
+  numberOfClasses: number,
+  inputShape: number[]
+) => {
   const model = tensorflow.sequential();
+  if (!inputShape) {
+    inputShape = [224, 224, 3];
+  }
   model.add(
     tensorflow.layers.conv2d({
-      inputShape: [224, 224, 3],
+      inputShape: inputShape,
       kernelSize: 3,
       filters: 16,
       activation: 'relu',
-      kernelInitializer: 'ones'
+      kernelInitializer: 'heNormal'
     })
   );
   model.add(tensorflow.layers.maxPooling2d({ poolSize: 2, strides: 2 }));
@@ -75,7 +102,7 @@ const createModel = async (numberOfClasses: number) => {
       kernelSize: 3,
       filters: 32,
       activation: 'relu',
-      kernelInitializer: 'ones'
+      kernelInitializer: 'heNormal'
     })
   );
   model.add(tensorflow.layers.maxPooling2d({ poolSize: 2, strides: 2 }));
@@ -84,7 +111,7 @@ const createModel = async (numberOfClasses: number) => {
       kernelSize: 3,
       filters: 32,
       activation: 'relu',
-      kernelInitializer: 'ones'
+      kernelInitializer: 'heNormal'
     })
   );
   model.add(tensorflow.layers.flatten());
@@ -92,14 +119,14 @@ const createModel = async (numberOfClasses: number) => {
     tensorflow.layers.dense({
       units: 32,
       activation: 'relu',
-      kernelInitializer: 'ones'
+      kernelInitializer: 'heNormal'
     })
   );
   model.add(
     tensorflow.layers.dense({
       units: numberOfClasses,
       activation: 'relu',
-      kernelInitializer: 'ones'
+      kernelInitializer: 'heNormal'
     })
   );
   model.add(
