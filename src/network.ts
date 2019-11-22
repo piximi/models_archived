@@ -1,6 +1,27 @@
 import * as tensorflow from '@tensorflow/tfjs';
 import * as _ from 'lodash';
-import { layers } from '@tensorflow/tfjs';
+
+const changeInputShape = async (
+  model: tensorflow.Sequential,
+  inputShape: number[]
+) => {
+  const newModel = tensorflow.sequential();
+  newModel.add(tensorflow.layers.inputLayer({inputShape: inputShape}))
+  const map = tensorflow.serialization.SerializationMap.getMap().classNameMap;
+  for (let i = 1; i < model.layers.length; i++) {
+    const layer = model.layers[i];
+    const className : string = layer.getClassName();
+    const [cls, fromConfig] = map[className];
+    let cfg = layer.getConfig();
+    const newlayer = fromConfig(cls, cfg);
+    // @ts-ignore
+    newModel.add(newlayer);
+    // @ts-ignore
+    newlayer.setWeights(layer.getWeights())
+  }
+
+  return newModel;
+};
 
 const createMobileNet = async (
   classes: number,
@@ -16,48 +37,44 @@ const createMobileNet = async (
   const layerName = 'conv_pw_13_relu';
   const layer = mobilenet.getLayer(layerName);
 
-  const backbone = tensorflow.model({
-    inputs: mobilenet.inputs,
-    outputs: layer.output
-  });
+  const backbone = tensorflow.sequential();
+  for (const l of mobilenet.layers) {
+    backbone.add(l);
+    if (l.name == layerName) {
+      break;
+    }
+  }
+
+  let model = backbone;
+  if (inputShape != [224, 224, 3]) {
+    model = await changeInputShape(model, inputShape);
+  }
 
   if (freeze) {
-    backbone.layers.forEach(function(l){
+    model.layers.forEach(function(l){
       l.trainable = false;
     })
   }
 
-  const a = tensorflow.layers.globalAveragePooling2d({
-    inputShape: backbone.outputs[0].shape.slice(1)
-  });
-
-  const b = tensorflow.layers.reshape({
-    targetShape: [1,1,backbone.outputs[0].shape[3]]
-  });
-
-  const c = tensorflow.layers.dropout({
-    rate: 0.001
-  });
-
-  const d = tensorflow.layers.conv2d({
-    filters: classes,
-    kernelSize: [1,1]
-  });
-
-  const e = tensorflow.layers.reshape({
-    targetShape: [classes]
-  });
-
-  const f = tensorflow.layers.activation({
-    activation: 'softmax'
-  });
-
-  let config = {layers: [...backbone.layers, a]};
   if (includeTop) {
-    config.layers.push(b, c, d, e, f)
-  }
+    model.add(tensorflow.layers.globalAveragePooling2d({}));
 
-  const model = tensorflow.sequential(config);
+    const numfeat = model.layers[model.layers.length - 1].outputShape[1]
+    model.add(tensorflow.layers.reshape({
+      targetShape: [1,1,numfeat as number]}));
+
+    model.add(tensorflow.layers.dropout({rate: 0.001}));
+
+    model.add(tensorflow.layers.conv2d({
+      filters: classes,
+      kernelSize: [1,1]}));
+
+    model.add(tensorflow.layers.reshape({
+      targetShape: [classes]}));
+
+    model.add(tensorflow.layers.activation({
+      activation: 'softmax'}));
+  }
 
   return model;
 };
@@ -154,6 +171,5 @@ const getArgs = (batchSize: number, epochs: number) => {
   };
   return getArgs;
 };
-
 
 export { createModel, createMobileNet, getArgs };
