@@ -1,9 +1,12 @@
 import * as tensorflow from '@tensorflow/tfjs';
 import * as _ from 'lodash';
+import { layers } from '@tensorflow/tfjs';
 
 const createMobileNet = async (
   classes: number,
-  freeze: boolean
+  inputShape: number[] = [224, 224, 3],
+  freeze: boolean = false,
+  includeTop: boolean = true
 ) => {
   const resource =
     'https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_0.25_224/model.json';
@@ -49,20 +52,27 @@ const createMobileNet = async (
     activation: 'softmax'
   });
 
-  const config = {
-    layers: [...backbone.layers, a, b, c, d, e, f]
-  };
+  let config = {layers: [...backbone.layers, a]};
+  if (includeTop) {
+    config.layers.push(b, c, d, e, f)
+  }
 
   const model = tensorflow.sequential(config);
 
   return model;
 };
 
-const createModel = async (numberOfClasses: number) => {
+const createModel = async (
+  numberOfClasses: number,
+  inputShape: number[]
+) => {
   const model = tensorflow.sequential();
+  if (!inputShape) {
+    inputShape = [224, 224, 3];
+  }
   model.add(
     tensorflow.layers.conv2d({
-      inputShape: [224, 224, 3],
+      inputShape: inputShape,
       kernelSize: 3,
       filters: 16,
       activation: 'relu',
@@ -144,5 +154,6 @@ const getArgs = (batchSize: number, epochs: number) => {
   };
   return getArgs;
 };
+
 
 export { createModel, createMobileNet, getArgs };
