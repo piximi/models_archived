@@ -93,7 +93,7 @@ const createModel = async (
       kernelSize: 3,
       filters: 16,
       activation: 'relu',
-      kernelInitializer: 'ones'
+      kernelInitializer: 'heNormal'
     })
   );
   model.add(tensorflow.layers.maxPooling2d({ poolSize: 2, strides: 2 }));
@@ -102,7 +102,7 @@ const createModel = async (
       kernelSize: 3,
       filters: 32,
       activation: 'relu',
-      kernelInitializer: 'ones'
+      kernelInitializer: 'heNormal'
     })
   );
   model.add(tensorflow.layers.maxPooling2d({ poolSize: 2, strides: 2 }));
@@ -111,7 +111,7 @@ const createModel = async (
       kernelSize: 3,
       filters: 32,
       activation: 'relu',
-      kernelInitializer: 'ones'
+      kernelInitializer: 'heNormal'
     })
   );
   model.add(tensorflow.layers.flatten());
@@ -119,14 +119,14 @@ const createModel = async (
     tensorflow.layers.dense({
       units: 32,
       activation: 'relu',
-      kernelInitializer: 'ones'
+      kernelInitializer: 'heNormal'
     })
   );
   model.add(
     tensorflow.layers.dense({
       units: numberOfClasses,
       activation: 'relu',
-      kernelInitializer: 'ones'
+      kernelInitializer: 'heNormal'
     })
   );
   model.add(
